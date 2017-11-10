@@ -7,7 +7,7 @@ setup(
     py_modules=['gp_project'],
     version='0.1',
     description='A Gaussian Process Project for STAT8810 at OSU',
-    author='Jordan Melendez',
+    author='Jordan Melendez, Akira Horiguchi, John Honaker',
     author_email='jmelendez1992@gmail.com',
     license='MIT',
     url='https://github.com/jordan-melendez/gp_project',
