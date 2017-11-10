@@ -2,6 +2,12 @@ from functools import reduce
 import numpy as np
 
 
+#################################################################
+# Based on functions defined in Yunus Saatci's Thesis (Ch. 5):
+# http://mlg.eng.cam.ac.uk/pub/pdf/Saa11.pdf
+#################################################################
+
+
 def kronecker(K):
     """Return the Kronecker product of list of arrays K:
             K_1 \otimes K_2 \otimes ... \otimes K_D
