@@ -1,5 +1,6 @@
 from functools import reduce
 import numpy as np
+from scipy.stats import multivariate_normal
 
 
 #################################################################
@@ -54,8 +55,6 @@ def kron_mvprod(kron_list, b):
     b        : array-like
                Nx1 column vector
     """
-    # N = np.size(b)
-    # print(b)
 
     return reduce(flat_mtprod, kron_list, b)
 
@@ -73,4 +72,106 @@ def kron_mmprod(kron_list, m):
                NxM matrix
     """
 
+    if len(m.shape) == 1:
+        m = m[:, None]  # Treat 1D array as Nx1 matrix
     return np.concatenate([kron_mvprod(kron_list, b) for b in m.T], axis=1)
+
+
+def flattened_outer(a, b):
+    return np.outer(a, b).ravel()
+
+
+def kron_diag(diags):
+    """Returns diagonal of kronecker product from list of diagonals.
+    """
+    return reduce(flattened_outer, diags)
+
+#################################################################
+# Statistical classes for use in GP regression. Based on PyMC3's
+# GP implementation and Yunus Saatci's Thesis mentioned above
+#################################################################
+
+
+def gaussian_kernel(x, xp, ell):
+    return np.exp(-np.subtract.outer(x, xp)**2/ell**2)
+
+
+class KroneckerNormal:
+    """A multivariate normal that makes use of Kronecker structure of covariance.
+
+    Parameters
+    ----------
+    mu   : array-like
+    covs : list of arrays
+    noise: float
+    """
+
+    def __init__(self, mu, covs, noise):
+        # K + noise = Q.(L + noise*I).Q^T
+        Lambdas, self.Qs = zip(*map(np.linalg.eigh, covs))  # Unzip tuples
+        self.QTs = tuple(map(np.transpose, self.Qs))
+        self.eig_noise = kron_diag(Lambdas) + noise
+        self.N = len(self.eig_noise)
+        self.mu = mu
+
+    def random(self, size=None):
+        """Drawn using x = mu + A.z for z~N(0,1) and A=Q.sqrt(Lambda)
+        """
+        if size is None:
+            size = [self.N]
+        elif isinstance(size, int):
+            size = [size, self.N]
+        else:
+            raise NotImplementedError
+
+        # Warning: This does not (yet) match with random draws from numpy
+        # since A is only defined up to some unknown orthogonal transformation.
+        # Numpy used svd while we must use eigendecomposition, which aren't
+        # easily related due to minus signs.
+        z = np.random.standard_normal(size)
+        sqrtLz = np.sqrt(self.eig_noise) * z
+        Az = kron_mmprod(self.Qs, sqrtLz.T).T
+        return self.mu + Az
+
+    def quaddist(self, value):
+        """The quadratic (x-mu)^T @ K^-1 @ (x-mu)"""
+        alpha = kron_mmprod(self.QTs, (value-self.mu).T)
+        alpha = alpha/self.eig_noise[:, None]
+        alpha = kron_mmprod(self.Qs, alpha)
+        quad = np.dot(value-self.mu, alpha)
+        quad = np.diag(quad)
+        return quad
+
+    def logp(self, value):
+        quad = self.quaddist(value)
+        logdet = np.sum(np.log(self.eig_noise))
+        return -1/2 * (quad + logdet + self.N*np.log(2*np.pi))
+
+
+class MarginalKron:
+    """
+    """
+
+    def __init__(self, mean_func, cov_func):
+        raise NotImplementedError
+
+    def _build_marginal_likelihood(self, X, noise):
+        raise NotImplementedError
+
+    def marginal_likelihood(self, X, y, noise, is_observed=True, **kwargs):
+        """
+        Returns the marginal likelihood distribution, given the input
+        locations `X` and the data `y`.
+        """
+        raise NotImplementedError
+
+    def _build_conditional(self, Xnew, pred_noise, diag, X, y, noise,
+                           cov_total, mean_total):
+        raise NotImplementedError
+
+    def conditional(self, name, Xnew, pred_noise=False, given=None, **kwargs):
+        """
+        Returns the conditional distribution evaluated over new input
+        locations `Xnew`.
+        """
+        raise NotImplementedError
