@@ -73,3 +73,17 @@ class HamiltonianSampler:
             self.current_position = position
         # Otherwise stay at the old value of position (self.current_position)
 
+    def burn_in(self, burn_steps):
+        for _ in range(burn_steps);
+            self._step()
+
+    def sample(self, n_samples):
+        samples = np.zeros(shape=[n_samples, self.num_dimensions])
+
+        samples[0,:] = self.current_position
+
+        for i in range(1, n_samples):
+            self._step()
+            samples[i, :] = self.current_position
+
+        return samples
