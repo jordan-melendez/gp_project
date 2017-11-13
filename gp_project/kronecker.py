@@ -36,7 +36,6 @@ def flat_mtprod(tens, mat):
     Z: column vector
        A (column) vectorized version of the matrix-tensor product
     """
-
     Nm = mat.shape[1]
     Tmat = tens.reshape((Nm, -1))
     Z = np.dot(mat, Tmat)
@@ -55,7 +54,6 @@ def kron_mvprod(kron_list, b):
     b        : array-like
                Nx1 column vector
     """
-
     return reduce(flat_mtprod, kron_list, b)
 
 
@@ -71,7 +69,6 @@ def kron_mmprod(kron_list, m):
     m        : array-like
                NxM matrix
     """
-
     if len(m.shape) == 1:
         m = m[:, None]  # Treat 1D array as Nx1 matrix
     return np.concatenate([kron_mvprod(kron_list, b) for b in m.T], axis=1)
@@ -85,6 +82,7 @@ def kron_diag(diags):
     """Returns diagonal of kronecker product from list of diagonals.
     """
     return reduce(flattened_outer, diags)
+
 
 #################################################################
 # Statistical classes for use in GP regression. Based on PyMC3's
@@ -115,7 +113,12 @@ class KroneckerNormal:
         self.mu = mu
 
     def random(self, size=None):
-        """Drawn using x = mu + A.z for z~N(0,1) and A=Q.sqrt(Lambda)
+        """Drawn using x = mu + A.z for z~N(0,I) and A=Q.sqrt(Lambda)
+
+        Warning: This does not (yet) match with random draws from numpy
+        since A is only defined up to some unknown orthogonal transformation.
+        Numpy used svd while we must use eigendecomposition, which aren't
+        easily related due to sign ambiguities and permutations of eigenvalues.
         """
         if size is None:
             size = [self.N]
@@ -124,10 +127,6 @@ class KroneckerNormal:
         else:
             raise NotImplementedError
 
-        # Warning: This does not (yet) match with random draws from numpy
-        # since A is only defined up to some unknown orthogonal transformation.
-        # Numpy used svd while we must use eigendecomposition, which aren't
-        # easily related due to minus signs.
         z = np.random.standard_normal(size)
         sqrtLz = np.sqrt(self.eig_noise) * z
         Az = kron_mmprod(self.Qs, sqrtLz.T).T
@@ -139,13 +138,17 @@ class KroneckerNormal:
         alpha = alpha/self.eig_noise[:, None]
         alpha = kron_mmprod(self.Qs, alpha)
         quad = np.dot(value-self.mu, alpha)
-        quad = np.diag(quad)
+        quad = np.diag(quad)  # Remove correlations between samples
         return quad
 
     def logp(self, value):
         quad = self.quaddist(value)
         logdet = np.sum(np.log(self.eig_noise))
         return -1/2 * (quad + logdet + self.N*np.log(2*np.pi))
+
+    def update(self):
+        # How will updates to hyperparameters be performed?
+        raise NotImplementedError
 
 
 class MarginalKron:
