@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 from scipy.stats import multivariate_normal
 import unittest
 from gp_project import *
@@ -57,7 +58,67 @@ class TestKronecker(unittest.TestCase):
         fast_ans = kron_diag(Kdiags)
         np.testing.assert_array_almost_equal(slow_ans, fast_ans)
 
-    def test_KroneckerNormal_logp(self):
+    def test_kron_chol_vsolve(self):
+        np.random.seed(1)
+        # Make mean, covariance, and noise
+        nvars = 3
+        lenvars = 5
+        xs = np.random.rand(nvars, lenvars)
+        xs = np.sort(xs)
+        Ks = [gaussian_kernel(x, x, .1) for x in xs]
+        chols = list(map(np.linalg.cholesky, Ks))
+        tot_size = np.prod([k.shape[1] for k in Ks])
+        b = np.random.rand(tot_size, 1)
+        fast_ans = kron_chol_vsolve(chols, b)
+
+        big = kronecker(Ks)
+        big_chol = np.linalg.cholesky(big)
+        slow_ans = sp.linalg.cho_solve((big_chol, True), b)
+
+        np.testing.assert_array_almost_equal(slow_ans, fast_ans)
+
+    def test_kron_chol_msolve(self):
+        np.random.seed(1)
+        # Make mean, covariance, and noise
+        nvars = 3
+        lenvars = 5
+        xs = np.random.rand(nvars, lenvars)
+        xs = np.sort(xs)
+        Ks = [gaussian_kernel(x, x, .1) for x in xs]
+        chols = list(map(np.linalg.cholesky, Ks))
+        tot_size = np.prod([k.shape[1] for k in Ks])
+        b = np.random.rand(tot_size, 4)
+        fast_ans = kron_chol_msolve(chols, b)
+
+        big = kronecker(Ks)
+        big_chol = np.linalg.cholesky(big)
+        slow_ans = sp.linalg.cho_solve((big_chol, True), b)
+
+        np.testing.assert_array_almost_equal(slow_ans, fast_ans)
+
+    def test_KroneckerNormal_EVDs_logp(self):
+        np.random.seed(1)
+        # Make mean, covariance, and noise
+        nvars = 3
+        lenvars = 5
+        xs = np.random.rand(nvars, lenvars)
+        xs = np.sort(xs)
+        Ks = [gaussian_kernel(x, x, .1) for x in xs]
+        tot_size = np.prod([k.shape[1] for k in Ks])
+        noise = 1
+        mu = np.ones(tot_size)
+        # Construct entire kronecker product and feed to multivariate normal
+        big = kronecker(Ks)
+        K = big + noise * np.eye(tot_size)
+        x = np.random.rand(tot_size)
+        sp_logp = multivariate_normal.logpdf(x, mean=mu, cov=K)
+        # Use smarter method
+        evds = list(map(np.linalg.eigh, Ks))
+        kron_logp = KroneckerNormal(mu=mu, EVDs=evds, noise=noise).logp(x)
+        # Test
+        np.testing.assert_array_almost_equal(sp_logp, kron_logp)
+
+    def test_KroneckerNormal_EVDs_logp_vec(self):
         np.random.seed(1)
         # Make mean, covariance, and noise
         nvars = 3
@@ -68,6 +129,28 @@ class TestKronecker(unittest.TestCase):
         tot_size = np.prod([k.shape[1] for k in Ks])
         mu = np.ones(tot_size)
         noise = 1
+        evds = list(map(np.linalg.eigh, Ks))
+        # Construct entire kronecker product and feed to multivariate normal
+        big = kronecker(Ks)
+        K = big + noise * np.eye(tot_size)
+        x = np.random.rand(10, tot_size)
+        sp_logp = multivariate_normal.logpdf(x, mean=mu, cov=K)
+        # Use smarter method
+        kron_logp = KroneckerNormal(mu=mu, EVDs=evds, noise=noise).logp(x)
+        # Test
+        np.testing.assert_array_almost_equal(sp_logp, kron_logp)
+
+    def test_KroneckerNormal_covs_noise_logp(self):
+        np.random.seed(1)
+        # Make mean, covariance, and noise
+        nvars = 3
+        lenvars = 5
+        xs = np.random.rand(nvars, lenvars)
+        xs = np.sort(xs)
+        Ks = [gaussian_kernel(x, x, .1) for x in xs]
+        tot_size = np.prod([k.shape[1] for k in Ks])
+        noise = 1
+        mu = np.ones(tot_size)
         # Construct entire kronecker product and feed to multivariate normal
         big = kronecker(Ks)
         K = big + noise * np.eye(tot_size)
@@ -78,7 +161,7 @@ class TestKronecker(unittest.TestCase):
         # Test
         np.testing.assert_array_almost_equal(sp_logp, kron_logp)
 
-    def test_KroneckerNormal_logp_vec(self):
+    def test_KroneckerNormal_covs_logp(self):
         np.random.seed(1)
         # Make mean, covariance, and noise
         nvars = 3
@@ -88,14 +171,31 @@ class TestKronecker(unittest.TestCase):
         Ks = [gaussian_kernel(x, x, .1) for x in xs]
         tot_size = np.prod([k.shape[1] for k in Ks])
         mu = np.ones(tot_size)
-        noise = 1
         # Construct entire kronecker product and feed to multivariate normal
-        big = kronecker(Ks)
-        K = big + noise * np.eye(tot_size)
+        K = kronecker(Ks)
+        x = np.random.rand(tot_size)
+        sp_logp = multivariate_normal.logpdf(x, mean=mu, cov=K)
+        # Use smarter method
+        kron_logp = KroneckerNormal(mu=mu, covs=Ks, noise=None).logp(x)
+        # Test
+        np.testing.assert_array_almost_equal(sp_logp, kron_logp)
+
+    def test_KroneckerNormal_covs_logp_vec(self):
+        np.random.seed(1)
+        # Make mean, covariance, and noise
+        nvars = 3
+        lenvars = 5
+        xs = np.random.rand(nvars, lenvars)
+        xs = np.sort(xs)
+        Ks = [gaussian_kernel(x, x, .1) for x in xs]
+        tot_size = np.prod([k.shape[1] for k in Ks])
+        mu = np.ones(tot_size)
+        # Construct entire kronecker product and feed to multivariate normal
+        K = kronecker(Ks)
         x = np.random.rand(10, tot_size)
         sp_logp = multivariate_normal.logpdf(x, mean=mu, cov=K)
         # Use smarter method
-        kron_logp = KroneckerNormal(mu=mu, covs=Ks, noise=noise).logp(x)
+        kron_logp = KroneckerNormal(mu=mu, covs=Ks, noise=None).logp(x)
         # Test
         np.testing.assert_array_almost_equal(sp_logp, kron_logp)
 
@@ -105,14 +205,15 @@ class TestKronecker(unittest.TestCase):
     #     lenvars = 3
     #     xs = np.random.rand(nvars, lenvars)
     #     xs = np.sort(xs)
-    #     Ks = [gaussian_kernel(x, x, .1) for x in xs]
+    #     Ks = [gaussian_kernel(x, x, .1)+1e-6*np.eye(x.shape[0]) for x in xs]
     #     tot_size = np.prod([k.shape[1] for k in Ks])
     #     mu = np.ones(tot_size)
-    #     noise = 1e-3
+    #     # noise = 1e-3
+    #     noise = None
     #     size = 2
     #     # Construct entire kronecker product and feed to multivariate normal
-    #     big = kronecker(Ks)
-    #     K = big + noise * np.eye(tot_size)
+    #     K = kronecker(Ks)
+    #     # K = big + noise * np.eye(tot_size)
     #     np.random.seed(1)
     #     # sp_kron_random = multivariate_normal.rvs(mean=mu, cov=K)
     #     sp_kron_random = multivariate_normal.rvs(mean=mu, cov=K, size=size)
@@ -120,3 +221,7 @@ class TestKronecker(unittest.TestCase):
     #     np.random.seed(1)
     #     kron_random = kron_norm.random(size=size)
     #     np.testing.assert_array_almost_equal(sp_kron_random, kron_random)
+
+# testK = TestKronecker()
+# testK.test_KroneckerNormal_covs_noise_logp()
+# testK.test_KroneckerNormal_covs_logp()
