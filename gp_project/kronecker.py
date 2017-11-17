@@ -1,5 +1,6 @@
 from functools import reduce
 import numpy as np
+import scipy as sp
 from scipy.stats import multivariate_normal
 
 
@@ -84,6 +85,94 @@ def kron_diag(diags):
     return reduce(flattened_outer, diags)
 
 
+def flat_chol_solve(b, chol):
+    """Solve A.x = b given cholesky decomposition of A
+    """
+    N = chol.shape[1]
+    B = b.reshape((N, -1))
+    X = sp.linalg.cho_solve((chol, True), B)
+    return X.T.reshape((-1, 1))
+
+
+def kron_chol_vsolve(chol_list, b):
+    """Solve kronecker(kron_list).x = b where chol_list is the
+    cholesky decomposition of matrices to be kronecker'ed: kron_list
+
+    Parameters
+    -----------
+    chol_list: list of 2D array-like objects
+               Cholesky decompositions of D matrices [A_1, A_2, ..., A_D]
+               to be Kronecker'ed:
+                    A = A_1 \otimes A_2 \otimes ... \otimes A_D
+               Product of column dimensions must be N
+    b        : array-like
+               Nx1 column vector
+    """
+    return reduce(flat_chol_solve, chol_list, b)
+
+
+def kron_chol_msolve(chol_list, m):
+    """Solve kronecker(kron_list).x = m where chol_list is the
+    cholesky decomposition of matrices to be kronecker'ed: kron_list
+
+    Parameters
+    -----------
+    chol_list: list of 2D array-like objects
+               Cholesky decompositions of D matrices [A_1, A_2, ..., A_D]
+               to be Kronecker'ed:
+                    A = A_1 \otimes A_2 \otimes ... \otimes A_D
+               Product of column dimensions must be N
+    m        : array-like
+               NxM matrix
+    """
+    if len(m.shape) == 1:
+        m = m[:, None]  # Treat 1D array as Nx1 matrix
+    return np.concatenate([kron_chol_vsolve(chol_list, b) for b in m.T], axis=1)
+
+
+def flat_lower_solve(b, L):
+    """Solve L.x = b given lower triangular matrix L
+    """
+    N = L.shape[1]
+    B = b.reshape((N, -1))
+    X = sp.linalg.solve_triangular(L, B, lower=True)
+    return X.T.reshape((-1, 1))
+
+
+def kron_lower_vsolve(lowers, b):
+    """Solve kronecker(lowers).x = b where lowers is a list of lower
+    triangular matrices.
+
+    Parameters
+    -----------
+    lowers   : list of 2D array-like objects
+               Lower triangular matrices
+                    L = L_1 \otimes L_2 \otimes ... \otimes L_D
+               Product of column dimensions must be N
+    b        : array-like
+               Nx1 column vector
+    """
+    return reduce(flat_lower_solve, lowers, b)
+
+
+def kron_lower_msolve(lowers, m):
+    """Solve kronecker(lowers).x = m where lowers is a list of lower
+    triangular matrices.
+
+    Parameters
+    -----------
+    lowers   : list of 2D array-like objects
+               Lower triangular matrices
+                    L = L_1 \otimes L_2 \otimes ... \otimes L_D
+               Product of column dimensions must be N
+    m        : array-like
+               NxM matrix
+    """
+    if len(m.shape) == 1:
+        m = m[:, None]  # Treat 1D array as Nx1 matrix
+    return np.concatenate([kron_lower_vsolve(lowers, b) for b in m.T], axis=1)
+
+
 #################################################################
 # Statistical classes for use in GP regression. Based on PyMC3's
 # GP implementation and Yunus Saatci's Thesis mentioned above
@@ -104,18 +193,57 @@ class KroneckerNormal:
     noise: float
     """
 
-    def __init__(self, mu, covs, noise):
+    def __init__(self, mu, covs=None, chols=None, EVDs=None, noise=None):
         # K + noise = Q.(L + noise*I).Q^T
-        Lambdas, self.Qs = zip(*map(np.linalg.eigh, covs))  # Unzip tuples
-        self.QTs = tuple(map(np.transpose, self.Qs))
-        self.eig_noise = kron_diag(Lambdas) + noise
-        self.N = len(self.eig_noise)
+        # Lambdas, self.Qs = zip(*map(np.linalg.eigh, covs))  # Unzip tuples
+        # self.QTs = tuple(map(np.transpose, self.Qs))
+        # self.eig_noise = kron_diag(Lambdas) + noise
+        # self.N = len(self.eig_noise)
+        self._setup(covs, chols, EVDs, noise)
         self.mu = mu
 
-    def random(self, size=None):
-        """Drawn using x = mu + A.z for z~N(0,I) and A=Q.sqrt(Lambda)
+    def _setup(self, covs, chols, EVDs, noise):
+        if len([i for i in [covs, chols, EVDs] if i is not None]) != 1:
+            raise ValueError('Incompatible parameterization. '
+                             'Specify exactly one of covs, chols, '
+                             'or EVDs.')
+        self.isEVD = False
+        if covs is not None:
+            self.covs = covs
+            if noise is not None:
+                # Noise requires eigendecomposition
+                self.isEVD = True
+                eigs_sep, self.Qs = zip(*map(np.linalg.eigh, covs))  # Unzip
+                self.QTs = list(map(np.transpose, self.Qs))
+                self.eigs = kron_diag(eigs_sep)  # Combine separate eigs
+                self.eigs += noise
+                self.N = len(self.eigs)
+            else:
+                # Otherwise use cholesky
+                self.chols = list(map(np.linalg.cholesky, self.covs))
+                self.chol_diags = np.array(list(map(np.diag, self.chols)))
+                self.sizes = np.array([len(chol) for chol in self.chols])
+                self.N = np.prod(self.sizes)
+        elif chols is not None:
+            self.chols = chols
+            self.chol_diags = np.array(list(map(np.diag, self.chols)))
+            self.sizes = np.array([len(chol) for chol in self.chols])
+            self.N = np.prod(self.sizes)
+        else:
+            self.isEVD = True
+            eigs_sep, self.Qs = zip(*EVDs)  # Unzip tuples
+            self.QTs = list(map(np.transpose, self.Qs))
+            self.eigs = kron_diag(eigs_sep)  # Combine separate eigs
+            if noise is not None:
+                self.eigs += noise
+            self.N = len(self.eigs)
 
-        Warning: This does not (yet) match with random draws from numpy
+    def random(self, size=None):
+        """Drawn using x = mu + A.z for z~N(0,I) and
+            A = Q.sqrt(Lambda), if isEVD
+            A = chol,           otherwise
+
+        Warning: EVD does not (yet) match with random draws from numpy
         since A is only defined up to some unknown orthogonal transformation.
         Numpy used svd while we must use eigendecomposition, which aren't
         easily related due to sign ambiguities and permutations of eigenvalues.
@@ -128,22 +256,32 @@ class KroneckerNormal:
             raise NotImplementedError
 
         z = np.random.standard_normal(size)
-        sqrtLz = np.sqrt(self.eig_noise) * z
-        Az = kron_mmprod(self.Qs, sqrtLz.T).T
+        if self.isEVD:
+            sqrtLz = np.sqrt(self.eigs) * z
+            Az = kron_mmprod(self.Qs, sqrtLz.T).T
+        else:
+            Az = kron_mmprod(self.chols, z.T).T
         return self.mu + Az
 
-    def quaddist(self, value):
-        """The quadratic (x-mu)^T @ K^-1 @ (x-mu)"""
-        alpha = kron_mmprod(self.QTs, (value-self.mu).T)
-        alpha = alpha/self.eig_noise[:, None]
-        alpha = kron_mmprod(self.Qs, alpha)
-        quad = np.dot(value-self.mu, alpha)
+    def _quaddist(self, value):
+        """Computes the quadratic (x-mu)^T @ K^-1 @ (x-mu) and log(det(K))"""
+        delta = value - self.mu
+        if self.isEVD:
+            alpha = kron_mmprod(self.QTs, delta.T)
+            alpha = alpha/self.eigs[:, None]
+            alpha = kron_mmprod(self.Qs, alpha)
+            quad = np.dot(delta, alpha)
+            logdet = np.sum(np.log(self.eigs))
+        else:
+            alpha = kron_lower_msolve(self.chols, delta.T)
+            quad = np.dot(alpha.T, alpha)
+            logchols = np.log(self.chol_diags) * self.N/self.sizes[:, None]
+            logdet = np.sum(2*logchols)
         quad = np.diag(quad)  # Remove correlations between samples
-        return quad
+        return quad, logdet
 
     def logp(self, value):
-        quad = self.quaddist(value)
-        logdet = np.sum(np.log(self.eig_noise))
+        quad, logdet = self._quaddist(value)
         return -1/2 * (quad + logdet + self.N*np.log(2*np.pi))
 
     def update(self):
