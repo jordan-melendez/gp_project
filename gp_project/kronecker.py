@@ -1,4 +1,5 @@
 from functools import reduce
+from itertools import cycle, zip_longest
 import numpy as np
 import scipy as sp
 from scipy.stats import multivariate_normal
@@ -20,6 +21,18 @@ def kronecker(K):
        [K_1, K_2, ..., K_D]
     """
     return reduce(np.kron, K)
+
+
+def cartesian(*arrays):
+    """Makes the Cartesian product of arrays.
+
+    Parameters
+    ----------
+    arrays: list of 1D array-like
+            1D arrays where earlier arrays loop more slowly than later ones
+    """
+    N = len(arrays)
+    return np.stack(np.meshgrid(*arrays, indexing='ij'), -1).reshape(-1, N)
 
 
 def flat_mtprod(tens, mat):
@@ -210,7 +223,7 @@ class KroneckerNormal:
         self.isEVD = False
         if covs is not None:
             self.covs = covs
-            if noise is not None:
+            if noise is not None and noise != 0:
                 # Noise requires eigendecomposition
                 self.isEVD = True
                 eigs_sep, self.Qs = zip(*map(np.linalg.eigh, covs))  # Unzip
@@ -267,17 +280,16 @@ class KroneckerNormal:
         """Computes the quadratic (x-mu)^T @ K^-1 @ (x-mu) and log(det(K))"""
         delta = value - self.mu
         if self.isEVD:
-            alpha = kron_mmprod(self.QTs, delta.T)
-            alpha = alpha/self.eigs[:, None]
-            alpha = kron_mmprod(self.Qs, alpha)
-            quad = np.dot(delta, alpha)
+            sqrt_quad = kron_mmprod(self.QTs, delta.T)
+            sqrt_quad = sqrt_quad/np.sqrt(self.eigs[:, None])
             logdet = np.sum(np.log(self.eigs))
         else:
-            alpha = kron_lower_msolve(self.chols, delta.T)
-            quad = np.dot(alpha.T, alpha)
+            sqrt_quad = kron_lower_msolve(self.chols, delta.T)
             logchols = np.log(self.chol_diags) * self.N/self.sizes[:, None]
             logdet = np.sum(2*logchols)
-        quad = np.diag(quad)  # Remove correlations between samples
+        # Square each sample
+        quad = np.einsum('ij,ij->j', sqrt_quad, sqrt_quad)
+        # For theano: quad = tt.batched_dot(sqrt_quad.T, sqrt_quad.T)
         return quad, logdet
 
     def logp(self, value):
@@ -293,22 +305,71 @@ class MarginalKron:
     """
     """
 
-    def __init__(self, mean_func, cov_func):
-        raise NotImplementedError
+    def __init__(self, mean_func, cov_funcs):
+        self.mean_func = mean_func
+        try:
+            self.cov_funcs = list(cov_funcs)
+        except TypeError:
+            self.cov_funcs = [cov_funcs]
 
-    def _build_marginal_likelihood(self, X, noise):
-        raise NotImplementedError
+    def _build_marginal_likelihood(self, Xs):
+        self.X = cartesian(*Xs)
+        mu = self.mean_func(self.X)
+        covs = [f(X) for f, X in zip_longest(cycle(self.cov_funcs), Xs)]
+        return mu, covs
 
-    def marginal_likelihood(self, X, y, noise, is_observed=True, **kwargs):
+    def marginal_likelihood(self, Xs, y, noise, is_observed=True, **kwargs):
         """
         Returns the marginal likelihood distribution, given the input
         locations `X` and the data `y`.
         """
-        raise NotImplementedError
+        mu, covs = self._build_marginal_likelihood(Xs)
+        self.Xs = Xs
+        self.y = y
+        self.noise = noise
+        return KroneckerNormal(mu=mu, covs=covs, noise=noise)
 
-    def _build_conditional(self, Xnew, pred_noise, diag, X, y, noise,
+    def total_cov(self, X, Xs=None, diag=False):
+        covs = [f(x, xs, diag) for f, x, xs in
+                zip_longest(cycle(self.cov_funcs), X.T, Xs.T)]
+        return reduce(mul, covs)
+
+    def _build_conditional(self, Xnew, pred_noise, diag, Xs, y, noise,
                            cov_total, mean_total):
-        raise NotImplementedError
+        # Old points
+        delta = y - self.mean_func(cartesian(Xs))
+        Kns = [f(X) for f, X in zip_longest(cycle(self.cov_funcs), Xs)]
+        eigs_sep, Qs = zip(*map(np.linalg.eigh, Kns))  # Unzip
+        QTs = list(map(np.transpose, Qs))
+        eigs = kron_diag(eigs_sep)  # Combine separate eigs
+        if noise is not None:
+            eigs += noise
+
+        # New points
+        Km = self.total_cov(Xnew, diag)
+        Knm = self.total_cov(cartesian(Xs), Xnew)
+        Kmn = Knm.T
+
+        # Build conditional mu
+        alpha = kron_mvprod(QTs, delta)
+        alpha = alpha/self.eigs[:, None]
+        alpha = kron_mvprod(Qs, alpha)
+        mu = np.dot(Kmns, alpha) + self.mean_func(Xnew)
+
+        # Build conditional cov
+        A = kron_mmprod(QTs, Knm)
+        A = A/np.sqrt(self.eigs[:, None])
+        if diag:
+            Asq = np.sum(np.square(A), 0)
+            cov = Km - Asq
+            if pred_noise:
+                cov += noise
+        else:
+            Asq = np.dot(A.T, A)
+            cov = Km - Asq
+            if pred_noise:
+                cov += noise*np.eye(cov.shape)
+        return mu, cov
 
     def conditional(self, name, Xnew, pred_noise=False, given=None, **kwargs):
         """
@@ -316,3 +377,5 @@ class MarginalKron:
         locations `Xnew`.
         """
         raise NotImplementedError
+        mu, cov = self._build_conditional(Xnew, pred_noise, False, *givens)
+        return MvNormal(mu=mu, cov=cov)
