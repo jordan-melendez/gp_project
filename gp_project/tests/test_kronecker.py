@@ -19,6 +19,30 @@ class TestKronecker(unittest.TestCase):
             np.kron(a, np.kron(b, c))   # Standard nested version
             )
 
+    def test_cartesian(self):
+        np.random.seed(1)
+        a = [1, 2, 3]
+        b = [0, 2]
+        c = [5, 6]
+        manual_cartesian = np.array(
+            [[1, 0, 5],
+             [1, 0, 6],
+             [1, 2, 5],
+             [1, 2, 6],
+             [2, 0, 5],
+             [2, 0, 6],
+             [2, 2, 5],
+             [2, 2, 6],
+             [3, 0, 5],
+             [3, 0, 6],
+             [3, 2, 5],
+             [3, 2, 6],
+             ]
+            )
+        auto_cart = cartesian(a, b, c)
+        print(auto_cart)
+        np.testing.assert_array_almost_equal(manual_cartesian, auto_cart)
+
     def test_kron_mvprod(self):
         np.random.seed(1)
         # Create random matrices
@@ -224,4 +248,4 @@ class TestKronecker(unittest.TestCase):
 
 # testK = TestKronecker()
 # testK.test_KroneckerNormal_covs_noise_logp()
-# testK.test_KroneckerNormal_covs_logp()
+# testK.test_KroneckerNormal_covs_logp_vec()
