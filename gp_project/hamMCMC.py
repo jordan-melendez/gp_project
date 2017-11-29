@@ -91,7 +91,7 @@ class HamiltonianSampler:
         return (position, velocity)
 
     def accept_proposed_sample(self, current_PE, proposed_PE, current_KE, proposed_KE):
-        if np.random.rand() < np.exp(current_PE - proposed_PE + current_KE - proposed_KE):
+        if np.log(np.random.rand()) < current_PE - proposed_PE + current_KE - proposed_KE:
             return True
         else:
             return False
