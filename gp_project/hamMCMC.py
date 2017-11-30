@@ -101,7 +101,7 @@ class HamiltonianSampler:
         velocity = np.random.normal(size=[self.num_dimensions])
         self.current_velocity = velocity
 
-        position, velocity = self._leapfrog(position, velocity)
+        position, velocity = self._leapfrog(self.current_position, self.current_velocity)
 
         current_PE, current_KE = self.evaluate_energy(self.current_position, self.current_velocity)
         proposed_PE, proposed_KE = self.evaluate_energy(position, velocity)
@@ -113,7 +113,7 @@ class HamiltonianSampler:
         # Otherwise stay at the old value of position (self.current_position)
 
     def burn_in(self, burn_steps):
-        for _ in range(burn_steps);
+        for _ in range(burn_steps):
             self._step()
 
     def sample(self, n_samples):
