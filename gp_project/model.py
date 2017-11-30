@@ -81,7 +81,7 @@ def GradUFactory(delta, Xs, rhos, mu_mu, sigmasq_mu, alpha_sig, beta_sig, alpha_
         V = delta - mu / (1-Q)
 
         # TODO Double check the value K, K+2, etc.
-        return 1/sigmasq * Rinv @ V * 1/(1-Q)^2 * (1-Q^2)/Q^(2*(K+2 + 1)
+        return 1/sigmasq * Rinv @ V * 1/(1-Q)^2 * (1-Q^2)/Q^(2*(K+2 + 1))
 
     def dDeltadQ(position):
         Q = position[index["Q"]]
