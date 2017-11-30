@@ -100,3 +100,5 @@ gp/
 
 # mypy
 .mypy_cache/
+
+.vscode/*
