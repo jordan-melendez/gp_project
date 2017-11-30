@@ -70,6 +70,8 @@ def GradUFactory(delta, Xs, rhos, mu_mu, sigmasq_mu, alpha_sig, beta_sig, alpha_
         Q = position[index["Q"]]
         sigmasq = position[index["SIGMASQ"]]
         mu = position[index["MU"]] * np.ones(N)
+        
+        V = delta - mu / (1-Q)
 
         return -N/2 * 1/sigmasq + 1/2 * 1/sigmasq^2 * V @ Rinv @ V * (1 - Q^2) / Q^(2*(K+2 + 1))
 
