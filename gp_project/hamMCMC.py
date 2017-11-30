@@ -75,13 +75,14 @@ class HamiltonianSampler:
     def _leapfrog_step(self, position, velocity):
         position = self._update_position(position, velocity, self.step_size)
         velocity = self._update_velocity(position, velocity, self.step_size)
+        # print("Position ", position, ", Velocity ", velocity)
         return (position, velocity)
 
     def _leapfrog(self, position, velocity):
+        # print("FIRST LEAPFROG: Position ", position, ", Velocity ", velocity)
         velocity = self._update_velocity(position, velocity, self.step_size / 2)
         for _ in range(self.num_leaps - 1):
-            position = self._update_position(position, velocity, self.step_size)
-            velocity = self._update_velocity(position, velocity, self.step_size)
+            position, velocity = self._leapfrog_step(position, velocity)
 
         position = self._update_position(position, velocity, self.step_size)
         velocity = self._update_velocity(position, velocity, self.step_size / 2)
@@ -91,6 +92,9 @@ class HamiltonianSampler:
         return (position, velocity)
 
     def accept_proposed_sample(self, current_PE, proposed_PE, current_KE, proposed_KE):
+        print("Current PE ", current_PE, ", Proposed PE ", proposed_PE,
+            ", Current KE", current_KE, ", Proposed KE ", proposed_KE)
+        print(np.exp(current_PE - proposed_PE + current_KE - proposed_KE))
         if np.log(np.random.rand()) < current_PE - proposed_PE + current_KE - proposed_KE:
             return True
         else:
@@ -113,7 +117,7 @@ class HamiltonianSampler:
         # Otherwise stay at the old value of position (self.current_position)
 
     def burn_in(self, burn_steps):
-        for _ in range(burn_steps):
+        for i in range(burn_steps):
             self._step()
 
     def sample(self, n_samples):
