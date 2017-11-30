@@ -9,7 +9,7 @@ chol_solve = partial(sp.linalg.cho_solve, check_finite=False)
 index = {
     "Q": 0,
     "MU": 1,
-    "SIGMASQ": 2,
+    "SIGMASQ": 2
     # "DELTA": 3
 }
 
@@ -209,14 +209,14 @@ def GradUFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
 
 from hamMCMC import HamiltonianSampler
 
-Xs = None
+theory_points = None
 length_scales = 10  # TOTALLY MADE UP
 
 U_function = UFactory(
-    Xs, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
-    alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
+    theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
+    theory_pointspha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 grad_U_function = GradUFactory(
-    Xs, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
+    theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
     alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 
 bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=20, step_size=0.1)
