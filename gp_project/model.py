@@ -1,36 +1,38 @@
 import numpy as np
 import scipy as sp
-from scipy import cholesky
+from scipy.linalg import cholesky
 from functools import partial
-from .kronecker import gaussian_kernel
+from gp_project.kronecker import gaussian_kernel
 
-chol_solve = partial(sp.nlinalg.cho_solve, check_finite=False)
+chol_solve = partial(sp.linalg.cho_solve, check_finite=False)
 
 index = {
     "Q": 0,
     "MU": 1,
-    "SIGMASQ": 2
+    "SIGMASQ": 2,
+    # "DELTA": 3
 }
 
 
-def UFactory(delta, Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
+def UFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
              beta_sig, alpha_Q, beta_Q):
 
     N, K = Xs.shape
     R = gaussian_kernel(kinpars, kinpars, ls) + jitter * np.eye(N)
     Rchol = np.linalg.cholesky(R)
 
-    def logDelta(position):
-        sigsq = position[index["SIGMASQ"]]
-        mu = position[index["MU"]]
-        Q = position[index["Q"]]
+    # def logDelta(position):
+    #     sigsq = position[index["SIGMASQ"]]
+    #     mu = position[index["MU"]]
+    #     Q = position[index["Q"]]
+    #     # delta = position[index['DELTA']]
 
-        V = delta - mu / (1 - Q)
-        RinvV = chol_solve((Rchol, True), V)
+    #     V = delta - mu / (1 - Q)
+    #     RinvV = chol_solve((Rchol, True), V)
 
-        return -N/2 * np.log(sigsq) \
-               - N/2 * Q**(2*K + 2) / (1 - Q**2) \
-               - 1/(2*sigsq) * V.T @ RinvV * (1-Q**2) / Q**(2*K + 2)
+    #     return -N/2 * np.log(sigsq) \
+    #            - N/2 * Q**(2*K + 2) / (1 - Q**2) \
+    #            - 1/(2*sigsq) * V.T @ RinvV * (1-Q**2) / Q**(2*K + 2)
 
     def logCi(position, i):
         sigmasq = position[index["SIGMASQ"]]
@@ -47,6 +49,11 @@ def UFactory(delta, Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
     def logC(position):
         return sum(logCi(position, i) for i in range(K))
 
+    def loglike(position):
+        Q = position[index["Q"]]
+        k = K + 2
+        return logC(position) - k*(k+1)/2 * np.log(Q)
+
     def logQ(position):
         Q = position[index["Q"]]
         return (alpha_Q - 1) * np.log(Q) + (beta_Q - 1) * np.log(1 - Q)
@@ -60,8 +67,7 @@ def UFactory(delta, Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
         return (alpha_sig - 1) * np.log(sigmasq) - beta_sig * sigmasq
 
     def U(position):
-        return logDelta(position) + \
-               logC(position) + \
+        return loglike(position) + \
                logQ(position) + \
                logMu(position) + \
                logSigmasq(position)
@@ -69,55 +75,63 @@ def UFactory(delta, Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
     return U
 
 
-def GradUFactory(delta, Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
+def GradUFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
                  beta_sig, alpha_Q, beta_Q):
 
     N, K = Xs.shape
     R = gaussian_kernel(kinpars, kinpars, ls) + jitter * np.eye(N)
     Rchol = np.linalg.cholesky(R)
 
-    def dDeltadSigmasq(position):
+    # def dDeltadSigmasq(position):
+    #     Q = position[index["Q"]]
+    #     sigmasq = position[index["SIGMASQ"]]
+    #     mu = position[index["MU"]] * np.ones(N)
+    #     delta = position[index['DELTA']]
+
+    #     V = delta - mu / (1-Q)
+    #     RinvV = chol_solve((Rchol, True), V)
+
+    #     return -N/2 * 1/sigmasq + 1/2 * 1/sigmasq**2 * V @ RinvV * \
+    #         (1 - Q**2) / Q**(2*(K+2 + 1))
+
+    # def dDeltadMu(position):
+    #     Q = position[index["Q"]]
+    #     sigmasq = position[index["SIGMASQ"]]
+    #     mu = position[index["MU"]] * np.ones(N)
+    #     delta = position[index['DELTA']]
+
+    #     V = delta - mu / (1-Q)
+    #     RinvV = chol_solve((Rchol, True), V)
+
+    #     # TODO Double check the value K, K+2, etc.
+    #     return 1/sigmasq * RinvV * 1/(1-Q)**2 * (1-Q**2)/Q**(2*(K+2 + 1))
+
+    # def dDeltadQ(position):
+    #     Q = position[index["Q"]]
+    #     sigmasq = position[index["SIGMASQ"]]
+    #     mu = position[index["MU"]] * np.ones(N)
+    #     delta = position[index['DELTA']]
+
+    #     k = K + 2
+
+    #     V = delta - mu / (1-Q)
+    #     RinvV = chol_solve((Rchol, True), V)
+
+    #     first = (1-Q**2)/Q**(2*k+2) * \
+    #         (2 * (k+1) * Q**(2*k + 1) * (1-Q**2) + 2*Q**(2*k + 3)) / \
+    #         (1 - Q**2)**2
+    #     second = 1/sigmasq * RinvV @ np.ones(N) * \
+    #         1 / (1-Q)**2 * (1 - Q**2) / Q**(2*k + 2)
+    #     third = 1/sigmasq * V.T @ RinvV * \
+    #         (Q**(2*k + 3) - (k+1) * Q**(2*k + 1) * (1 - Q**2)) / \
+    #         Q**(4*k + 4)
+
+    #     return first + second + third
+
+    def dJacobiandQ(position):
         Q = position[index["Q"]]
-        sigmasq = position[index["SIGMASQ"]]
-        mu = position[index["MU"]] * np.ones(N)
-
-        V = delta - mu / (1-Q)
-        RinvV = chol_solve((Rchol, True), V)
-
-        return -N/2 * 1/sigmasq + 1/2 * 1/sigmasq**2 * V @ RinvV * \
-            (1 - Q**2) / Q**(2*(K+2 + 1))
-
-    def dDeltadMu(position):
-        Q = position[index["Q"]]
-        sigmasq = position[index["SIGMASQ"]]
-        mu = position[index["MU"]] * np.ones(N)
-
-        V = delta - mu / (1-Q)
-        RinvV = chol_solve((Rchol, True), V)
-
-        # TODO Double check the value K, K+2, etc.
-        return 1/sigmasq * RinvV * 1/(1-Q)**2 * (1-Q**2)/Q**(2*(K+2 + 1))
-
-    def dDeltadQ(position):
-        Q = position[index["Q"]]
-        sigmasq = position[index["SIGMASQ"]]
-        mu = position[index["MU"]] * np.ones(N)
-
         k = K + 2
-
-        V = delta - mu / (1-Q)
-        RinvV = chol_solve((Rchol, True), V)
-
-        first = (1-Q**2)/Q**(2*k+2) * \
-            (2 * (k+1) * Q**(2*k + 1) * (1-Q**2) + 2*Q**(2*k + 3)) / \
-            (1 - Q**2)**2
-        second = 1/sigmasq * RinvV @ np.ones(N) * \
-            1 / (1-Q)**2 * (1 - Q**2) / Q**(2*k + 2)
-        third = 1/sigmasq * V.T @ RinvV * \
-            (Q**(2*k + 3) - (k+1) * Q**(2*k + 1) * (1 - Q**2)) / \
-            Q**(4*k + 4)
-
-        return first + second + third
+        return -k * (k+1) / (2*Q)
 
     def dCidSigmasq(position, i):
         Q = position[index["Q"]]
@@ -174,32 +188,40 @@ def GradUFactory(delta, Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
         return -(alpha_sig - 1) / sigmasq + beta_sig / sigmasq**2
 
     def dJointdQ(position):
-        return dDeltadQ(position) + dCdQ(position) + dlogQdQ(position)
+        # return dDeltadQ(position) + dCdQ(position) + dlogQdQ(position)
+        return dCdQ(position) + dlogQdQ(position) + dJacobiandQ(position)
 
     def dJointdMu(position):
-        return dDeltadMu(position) + dCdMu(position) + dlogMudMu(position)
+        # return dDeltadMu(position) + dCdMu(position) + dlogMudMu(position)
+        return dCdMu(position) + dlogMudMu(position)
 
     def dJointdSigmasq(position):
-        return dDeltadSigmasq(position) + dCdSigmasq(position) + dlogSigmasqdSigmaSq(position)
+        # return dDeltadSigmasq(position) + dCdSigmasq(position) + \
+        #     dlogSigmasqdSigmaSq(position)
+        return dCdSigmasq(position) + dlogSigmasqdSigmaSq(position)
 
     def gradU(position):
-        return np.array([dJointdQ(position), dJointdMu(position), dJointdSigmasq(position)])
+        return np.array([dJointdQ(position), dJointdMu(position),
+                         dJointdSigmasq(position)])
 
     return gradU
 
 
 from hamMCMC import HamiltonianSampler
 
-deltas = None
 Xs = None
-length.scales = 10 # TOTALLY MADE UP
+length_scales = 10  # TOTALLY MADE UP
 
-U_function = UFactory(deltas, Xs, length.scales, mu_mu=0, sigmasq_mu=1, alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
-grad_U_function = GradUFactory(deltas, Xs, length.scales, mu_mu=0, sigmasq_mu=1, alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
+U_function = UFactory(
+    Xs, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
+    alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
+grad_U_function = GradUFactory(
+    Xs, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
+    alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 
 bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=20, step_size=0.1)
 
-start_position = np.array([0.3, 0, 1]) # Q, Mu, SigamSq
+start_position = np.array([0.3, 0, 1])  # Q, Mu, SigamSq
 
 bayes_model.initialize(start_position)
 bayes_model.set_seed(2343)
