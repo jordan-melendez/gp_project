@@ -165,3 +165,22 @@ def GradUFactory(delta, Xs, rhos, mu_mu, sigmasq_mu, alpha_sig, beta_sig, alpha_
         return np.array([dJointdQ(position), dJointdMu(position), dJointdSigmasq(position)])
 
     return gradU
+
+
+from hamMCMC import HamiltonianSampler
+
+deltas = None
+Xs = None
+length.scales = 10 # TOTALLY MADE UP
+
+U_function = UFactory(deltas, Xs, length.scales, mu_mu=0, sigmasq_mu=1, alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
+grad_U_function = GradUFactory(deltas, Xs, length.scales, mu_mu=0, sigmasq_mu=1, alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
+
+bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=20, step_size=0.1)
+
+start_position = np.array([0.3, 0, 1]) # Q, Mu, SigamSq
+
+bayes_model.initialize(start_position)
+bayes_model.set_seed(2343)
+bayes_model.burn_in(5000)
+bayes_model.sample(10000)
