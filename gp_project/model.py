@@ -10,11 +10,8 @@ def UFactory(delta, Xs, rhos, mu_mu, sigmasq_mu, alpha_Q, beta_Q, alpha_sig, bet
 
     N, K = Xs.shape
 
-    def Rinverse(position):
-        raise NotImplementedError
-
-    def logDetR(position):
-        raise NotImplementedError
+    Rinv = None # Doesn't depend on anything by the Xs and the rhos, so its constant wrt Q, sigsq, mu
+                # LogDetR doesn't need calculated since its constant and cancels in MH step
 
     def logDelta(position):
         sigsq = position[index["SIGMASQ"]]
@@ -26,7 +23,7 @@ def UFactory(delta, Xs, rhos, mu_mu, sigmasq_mu, alpha_Q, beta_Q, alpha_sig, bet
         return -N/2 * np.log(sigsq) \
                - 1/2 * logDetR(position) \
                - N/2 * Q^(2*K + 2) / (1 - Q^2) \
-               - 1/(2*sigsq) * V.T @ Rinverse(position) @ V * (1-Q^2) / Q^(2*K + 2)
+               - 1/(2*sigsq) * V.T @ Rinv @ V * (1-Q^2) / Q^(2*K + 2)
 
     def logCi(position, i):
         sigmasq = position[index["SIGMASQ"]]
@@ -37,7 +34,7 @@ def UFactory(delta, Xs, rhos, mu_mu, sigmasq_mu, alpha_Q, beta_Q, alpha_sig, bet
 
         V = Ci - mu
 
-        return -N/2 * np.log(sigmasq) - 1/(2 * sigmasq)  * V.T @ Rinverse(position) @ V
+        return -N/2 * np.log(sigmasq) - 1/(2 * sigmasq)  * V.T @ Rinv @ V
 
     def logC(position):
         return sum(logCi(position, i) for i in range(K))
