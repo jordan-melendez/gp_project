@@ -364,7 +364,7 @@ class MarginalKron:
         alpha = kron_mvprod(QTs, delta)
         alpha = alpha/self.eigs[:, None]
         alpha = kron_mvprod(Qs, alpha)
-        mu = np.dot(Kmns, alpha) + self.mean_func(Xnew)
+        mu = np.dot(Kmn, alpha) + self.mean_func(Xnew)
 
         # Build conditional cov
         A = kron_mmprod(QTs, Knm)
