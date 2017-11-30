@@ -1,8 +1,10 @@
 import numpy as np
 import scipy as sp
+import pandas as pd
 from scipy.linalg import cholesky
 from functools import partial
-from gp_project.kronecker import gaussian_kernel
+from kronecker import gaussian_kernel
+from hamMCMC import HamiltonianSampler
 
 chol_solve = partial(sp.linalg.cho_solve, check_finite=False)
 
@@ -181,10 +183,10 @@ def GradUFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
 
     def dlogMudMu(position):
         mu = position[index["MU"]]
-        return - (mu - mu_mu)
+        return - 1/(2*sigmasq_mu) * (mu - mu_mu)
 
     def dlogSigmasqdSigmaSq(position):
-        sigmasq = position[index["SIGMSQ"]]
+        sigmasq = position[index["SIGMASQ"]]
         return -(alpha_sig - 1) / sigmasq + beta_sig / sigmasq**2
 
     def dJointdQ(position):
@@ -206,24 +208,30 @@ def GradUFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
 
     return gradU
 
-
-from hamMCMC import HamiltonianSampler
-
-theory_points = None
-length_scales = 10  # TOTALLY MADE UP
+A_data = pd.read_csv("./data/A_data.csv")
+A_data = A_data[A_data.Energy == 100]
+theory_points = A_data.loc[:, ['2', '3', '4', '5']].values
+kinpars = A_data.theta.values
+jitter = 1e-7
+length_scales = 20  # TOTALLY MADE UP
 
 U_function = UFactory(
     theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
-    theory_pointspha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
+    alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 grad_U_function = GradUFactory(
     theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
     alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 
-bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=20, step_size=0.1)
+bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=20, step_size=0.25)
 
 start_position = np.array([0.3, 0, 1])  # Q, Mu, SigamSq
 
 bayes_model.initialize(start_position)
+bayes_model.set_bounds({0: (0, 1),
+                        1: (-np.Infinity, np.Infinity),
+                        2: (0, np.Infinity)})
 bayes_model.set_seed(2343)
-bayes_model.burn_in(5000)
-bayes_model.sample(10000)
+bayes_model.burn_in(100)
+results = bayes_model.sample(10)
+
+print(results)
