@@ -212,8 +212,8 @@ A_data = pd.read_csv("./data/A_data.csv")
 A_data = A_data[A_data.Energy == 100]
 theory_points = A_data.loc[:, ['2', '3', '4', '5']].values
 kinpars = A_data.theta.values
-jitter = 1e-7
-length_scales = 20  # TOTALLY MADE UP
+jitter = 1e-10
+length_scales = 3  # TOTALLY MADE UP
 
 U_function = UFactory(
     theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
@@ -222,9 +222,9 @@ grad_U_function = GradUFactory(
     theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
     alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 
-bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=20, step_size=0.25)
+bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=25, step_size=0.00001)
 
-start_position = np.array([0.3, 0, 1])  # Q, Mu, SigamSq
+start_position = np.array([0.55, 0.001, 0.1])  # Q, Mu, SigamSq
 
 bayes_model.initialize(start_position)
 bayes_model.set_bounds({0: (0, 1),
@@ -232,6 +232,6 @@ bayes_model.set_bounds({0: (0, 1),
                         2: (0, np.Infinity)})
 bayes_model.set_seed(2343)
 bayes_model.burn_in(100)
-results = bayes_model.sample(10)
+results = bayes_model.sample(100)
 
 print(results)
