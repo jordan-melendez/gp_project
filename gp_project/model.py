@@ -6,7 +6,7 @@ index = {
     "SIGMASQ": 2
 }
 
-def UFactory(delta, Xs, rhos, prior_mu, prior_sigmasq, alpha, beta):
+def UFactory(delta, Xs, rhos, mu_mu, sigmasq_mu, alpha_Q, beta_Q, alpha_sig, beta_sig):
 
     N, K = Xs.shape
 
@@ -20,7 +20,6 @@ def UFactory(delta, Xs, rhos, prior_mu, prior_sigmasq, alpha, beta):
         sigsq = position[index["SIGMASQ"]]
         mu = position[index["MU"]]
         Q = position[index["Q"]]
-        Rinv = Rinverse(position)
 
         V = delta - mu / (1 - Q)
 
@@ -29,32 +28,42 @@ def UFactory(delta, Xs, rhos, prior_mu, prior_sigmasq, alpha, beta):
                - N/2 * Q^(2*K + 2) / (1 - Q^2) \
                - 1/(2*sigsq) * V.T @ Rinverse(position) @ V * (1-Q^2) / Q^(2*K + 2)
 
-    def logCi(position):
-        raise NotImplementedError
+    def logCi(position, i):
+        sigmasq = position[index["SIGMASQ"]]
+        mu = position[index["MU"]] * np.ones(N)
+        Q = position[index["Q"]]
+        # Since index starts at 0, we need to add 2 to get the correct order
+        Ci = Xs[:, i] / Q^(i + 2)
+
+        V = Ci - mu
+
+        return -N/2 * np.log(sigmasq) - 1/(2 * sigmasq)  * V.T @ Rinverse(position) @ V
 
     def logC(position):
-        raise NotImplementedError
+        return sum(logCi(position, i) for i in range(K))
 
     def logQ(position):
         Q = position[index["Q"]]
         return (alpha - 1) * np.log(Q) + (beta - 1) * np.log(1 - Q)
 
     def logMu(position):
-        raise NotImplementedError
+        mu = position[index["MU"]]
+        return -1/(2 * sigmasq_mu) * (mu - mu_mu)^2
 
     def logSigmasq(position):
-        raise NotImplementedError
+        sigmasq = position[index["SIGMASQ"]]
+        return (alpha_sig - 1) * np.log(sigmasq) - beta_sig * sigmasq
 
     def U(position):
-        return logDelta(position) * \
-               logC(position) * \
-               logQ(position) * \
-               logMu(position) * \
+        return logDelta(position) + \
+               logC(position) + \
+               logQ(position) + \
+               logMu(position) + \
                logSigmasq(position)
 
     return U
 
-def GradUFactory(Xs, prior_mu, prior_sigmasq, alpha, beta):
+def GradUFactory(delta, Xs, rhos, mu_mu, sigmasq_mu, alpha_sig, beta_sig, alpha_Q, beta_Q):
 
     def Rinverse(position):
         raise NotImplementedError
