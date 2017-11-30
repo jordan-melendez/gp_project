@@ -203,15 +203,21 @@ class KroneckerNormal:
     ----------
     mu   : array-like
     covs : list of arrays
+           The set of covariance matrices to be Kroneckered
+                [K_1, K_2, ...]
+           such that K = K_1 \otimes K_2 \otimes ...
+    chols: list of arrays
+           The set of lower cholesky matrices to be Kroneckered
+                [chol_1, chol_2, ...]
+           such that K_i = chol_i * chol_i^T
+    EVDs : list of tuples
+           The set of eigenvalue-vector, eigenvector-matrix pairs, e.g.,
+                [(v1, Q1), (v2, Q2), ...]
+           such that K_i = Q_i^T * diag(v_i) * Q_i
     noise: float
     """
 
-    def __init__(self, mu, covs=None, chols=None, EVDs=None, noise=None):
-        # K + noise = Q.(L + noise*I).Q^T
-        # Lambdas, self.Qs = zip(*map(np.linalg.eigh, covs))  # Unzip tuples
-        # self.QTs = tuple(map(np.transpose, self.Qs))
-        # self.eig_noise = kron_diag(Lambdas) + noise
-        # self.N = len(self.eig_noise)
+    def __init__(self, mu=0, covs=None, chols=None, EVDs=None, noise=None):
         self._setup(covs, chols, EVDs, noise)
         self.mu = mu
 
@@ -330,14 +336,18 @@ class MarginalKron:
         return KroneckerNormal(mu=mu, covs=covs, noise=noise)
 
     def total_cov(self, X, Xs=None, diag=False):
-        covs = [f(x, xs, diag) for f, x, xs in
-                zip_longest(cycle(self.cov_funcs), X.T, Xs.T)]
+        if Xs is None:
+            covs = [f(x, diag) for f, x in
+                    zip_longest(cycle(self.cov_funcs), X.T)]
+        else:
+            covs = [f(x, xs, diag) for f, x, xs in
+                    zip_longest(cycle(self.cov_funcs), X.T, Xs.T)]
         return reduce(mul, covs)
 
     def _build_conditional(self, Xnew, pred_noise, diag, Xs, y, noise,
                            cov_total, mean_total):
         # Old points
-        delta = y - self.mean_func(cartesian(Xs))
+        delta = y - self.mean_func(cartesian(*Xs))
         Kns = [f(X) for f, X in zip_longest(cycle(self.cov_funcs), Xs)]
         eigs_sep, Qs = zip(*map(np.linalg.eigh, Kns))  # Unzip
         QTs = list(map(np.transpose, Qs))
@@ -347,7 +357,7 @@ class MarginalKron:
 
         # New points
         Km = self.total_cov(Xnew, diag)
-        Knm = self.total_cov(cartesian(Xs), Xnew)
+        Knm = self.total_cov(cartesian(*Xs), Xnew)
         Kmn = Knm.T
 
         # Build conditional mu
