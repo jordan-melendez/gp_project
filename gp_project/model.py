@@ -216,22 +216,30 @@ jitter = 1e-10
 length_scales = 3  # TOTALLY MADE UP
 
 U_function = UFactory(
-    theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
+    theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=10,
     alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 grad_U_function = GradUFactory(
-    theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=1,
+    theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=10,
     alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 
 bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=25, step_size=0.00001)
 
 start_position = np.array([0.55, 0.001, 0.1])  # Q, Mu, SigamSq
 
-bayes_model.initialize(start_position)
+bayes_model.initialize(start_position, np.array((10, 1, 1)))
 bayes_model.set_bounds({0: (0, 1),
                         1: (-np.Infinity, np.Infinity),
                         2: (0, np.Infinity)})
 bayes_model.set_seed(2343)
 bayes_model.burn_in(100)
 results = bayes_model.sample(100)
+
+Q = results[:, index["Q"]]
+mu = results[:, index["MU"]]
+sigmasq = results[:, index["SIGMASQ"]]
+
+delta_mu = Q**6 / (1 - Q) * mu
+delta_sig = np.sqrt(Q**12 / (1 - Q**2) * sigmasq)
+deltas = np.random.normal(loc=delta_mu, scale=delta_sig)
 
 print(results)
