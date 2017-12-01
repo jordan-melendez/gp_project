@@ -28,12 +28,14 @@ class HamiltonianSampler:
     def set_seed(self, seed):
         np.random.seed(seed)
 
-    def initialize(self, start_q):
+    def initialize(self, start_q, mass):
         """Sets the starting point for the MCMC sampler, and initializes some important variables"""
         self.num_dimensions = len(start_q)
 
         self.upper_bounds = np.full([self.num_dimensions], np.Infinity)
         self.lower_bounds = np.full([self.num_dimensions], -np.Infinity)
+
+        self.mass = mass
 
         self.current_position = start_q
 
@@ -53,13 +55,13 @@ class HamiltonianSampler:
             self.upper_bounds[idx] = upper
 
     def kinetic_energy(self, velocity):
-        return np.sum(np.square(velocity)) / 2
+        return np.sum(velocity @ np.diag(self.mass) @ velocity) / 2
 
     def evaluate_energy(self, position, velocity):
         return (self.U(position), self.kinetic_energy(velocity))
 
     def _update_position(self, position, velocity, step_size):
-        new_position = position + step_size * velocity
+        new_position = position + step_size * self.mass * velocity
 
         above_bound = new_position > self.upper_bounds
         below_bound = new_position < self.lower_bounds
