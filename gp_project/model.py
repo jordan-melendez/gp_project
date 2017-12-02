@@ -1,5 +1,7 @@
 import numpy as np
 import scipy as sp
+import scipy.stats
+from scipy.stats import multivariate_normal
 import pandas as pd
 from scipy.linalg import cholesky
 from functools import partial
@@ -43,10 +45,11 @@ def UFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
         # Since index starts at 0, we need to add 2 to get the correct order
         Ci = Xs[:, i] / Q**(i + 2)
 
-        V = Ci - mu
-        RinvV = chol_solve((Rchol, True), V)
+        # V = Ci - mu
+        # RinvV = chol_solve((Rchol, True), V)
 
-        return -N/2 * np.log(sigmasq) - 1/(2 * sigmasq) * V.T @ RinvV
+        # return -N/2 * np.log(sigmasq) - 1/(2 * sigmasq) * V.T @ RinvV
+        return multivariate_normal.logpdf(Ci, mean=mu, cov=sigmasq*R)
 
     def logC(position):
         return sum(logCi(position, i) for i in range(K))
@@ -58,15 +61,18 @@ def UFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
 
     def logQ(position):
         Q = position[index["Q"]]
-        return (alpha_Q - 1) * np.log(Q) + (beta_Q - 1) * np.log(1 - Q)
+        # return (alpha_Q - 1) * np.log(Q) + (beta_Q - 1) * np.log(1 - Q)
+        return sp.stats.beta.logpdf(Q, a=alpha_Q, b=beta_Q)
 
     def logMu(position):
         mu = position[index["MU"]]
-        return -1/(2 * sigmasq_mu) * (mu - mu_mu)**2
+        # return -1/(2 * sigmasq_mu) * (mu - mu_mu)**2
+        return sp.stats.norm.logpdf(mu, loc=mu_mu, scale=np.sqrt(sigmasq_mu))
 
     def logSigmasq(position):
         sigmasq = position[index["SIGMASQ"]]
-        return (alpha_sig - 1) * np.log(sigmasq) - beta_sig * sigmasq
+        # return (alpha_sig - 1) * np.log(sigmasq) - beta_sig * sigmasq
+        return sp.stats.invgamma.logpdf(sigmasq, a=alpha_sig, scale=beta_sig)
 
     def U(position):
         return loglike(position) + \
