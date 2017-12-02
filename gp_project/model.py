@@ -231,8 +231,8 @@ bayes_model.set_bounds({0: (0, 1),
                         1: (-np.Infinity, np.Infinity),
                         2: (0, np.Infinity)})
 bayes_model.set_seed(2343)
-bayes_model.burn_in(100)
-results = bayes_model.sample(100)
+#bayes_model.burn_in(100)
+results = bayes_model.sample(200)
 
 Q = results[:, index["Q"]]
 mu = results[:, index["MU"]]
@@ -242,4 +242,11 @@ delta_mu = Q**6 / (1 - Q) * mu
 delta_sig = np.sqrt(Q**12 / (1 - Q**2) * sigmasq)
 deltas = np.random.normal(loc=delta_mu, scale=delta_sig)
 
-print(results)
+print_res = np.zeros((results.shape[0], results.shape[1] + 2))
+print_res[:, 0:3] = results
+print_res[:, 3] = delta_mu
+print_res[:, 4] = delta_sig
+
+print(print_res)
+
+print("Acceptance Percentage: ", bayes_model.number_accepted / bayes_model.total_number_of_draws)
