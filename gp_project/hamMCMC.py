@@ -55,7 +55,7 @@ class HamiltonianSampler:
             self.upper_bounds[idx] = upper
 
     def kinetic_energy(self, velocity):
-        return np.sum(velocity @ np.diag(self.mass) @ velocity) / 2
+        return velocity @ np.diag(self.mass) @ velocity / 2
 
     def evaluate_energy(self, position, velocity):
         return (self.U(position), self.kinetic_energy(velocity))
