@@ -25,6 +25,9 @@ class HamiltonianSampler:
         self.current_velocity = None
         self.num_dimensions = None
 
+        self.total_number_of_draws = 0
+        self.number_accepted = 0
+
     def set_seed(self, seed):
         np.random.seed(seed)
 
@@ -116,19 +119,23 @@ class HamiltonianSampler:
 
         if accept == True:
             self.current_position = position
+            self.number_accepted += 1
         # Otherwise stay at the old value of position (self.current_position)
 
     def burn_in(self, burn_steps):
+        pre_number_accepted = self.number_accepted
         for i in range(burn_steps):
             self._step()
+        self.number_accepted = pre_number_accepted
 
     def sample(self, n_samples):
         samples = np.zeros(shape=[n_samples, self.num_dimensions])
 
-        samples[0,:] = self.current_position
+        samples[0, :] = self.current_position
 
         for i in range(1, n_samples):
             self._step()
             samples[i, :] = self.current_position
+            self.total_number_of_draws += 1
 
         return samples
