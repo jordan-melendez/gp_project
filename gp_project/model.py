@@ -3,6 +3,7 @@ import scipy as sp
 import scipy.stats
 from scipy.stats import multivariate_normal
 import pandas as pd
+import matplotlib.pyplot as plt
 from scipy.linalg import cholesky
 from functools import partial
 from kronecker import gaussian_kernel
@@ -45,11 +46,11 @@ def UFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
         # Since index starts at 0, we need to add 2 to get the correct order
         Ci = Xs[:, i] / Q**(i + 2)
 
-        # V = Ci - mu
-        # RinvV = chol_solve((Rchol, True), V)
+        V = Ci - mu
+        RinvV = chol_solve((Rchol, True), V)
 
-        # return -N/2 * np.log(sigmasq) - 1/(2 * sigmasq) * V.T @ RinvV
-        return multivariate_normal.logpdf(Ci, mean=mu, cov=sigmasq*R)
+        return -N/2 * np.log(sigmasq) - 1/(2 * sigmasq) * V.T @ RinvV
+        # return multivariate_normal.logpdf(Ci, mean=mu, cov=sigmasq*R)
 
     def logC(position):
         return sum(logCi(position, i) for i in range(K))
@@ -61,18 +62,18 @@ def UFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
 
     def logQ(position):
         Q = position[index["Q"]]
-        # return (alpha_Q - 1) * np.log(Q) + (beta_Q - 1) * np.log(1 - Q)
-        return sp.stats.beta.logpdf(Q, a=alpha_Q, b=beta_Q)
+        return (alpha_Q - 1) * np.log(Q) + (beta_Q - 1) * np.log(1 - Q)
+        # return sp.stats.beta.logpdf(Q, a=alpha_Q, b=beta_Q)
 
     def logMu(position):
         mu = position[index["MU"]]
-        # return -1/(2 * sigmasq_mu) * (mu - mu_mu)**2
-        return sp.stats.norm.logpdf(mu, loc=mu_mu, scale=np.sqrt(sigmasq_mu))
+        return -1/(2 * sigmasq_mu) * (mu - mu_mu)**2
+        # return sp.stats.norm.logpdf(mu, loc=mu_mu, scale=np.sqrt(sigmasq_mu))
 
     def logSigmasq(position):
         sigmasq = position[index["SIGMASQ"]]
-        # return (alpha_sig - 1) * np.log(sigmasq) - beta_sig * sigmasq
-        return sp.stats.invgamma.logpdf(sigmasq, a=alpha_sig, scale=beta_sig)
+        return (-alpha_sig - 1) * np.log(sigmasq) - beta_sig * sigmasq
+        # return sp.stats.invgamma.logpdf(sigmasq, a=alpha_sig, scale=beta_sig)
 
     def U(position):
         return loglike(position) + \
@@ -193,7 +194,7 @@ def GradUFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
 
     def dlogSigmasqdSigmaSq(position):
         sigmasq = position[index["SIGMASQ"]]
-        return -(alpha_sig - 1) / sigmasq + beta_sig / sigmasq**2
+        return (-alpha_sig - 1) / sigmasq + beta_sig / sigmasq**2
 
     def dJointdQ(position):
         # return dDeltadQ(position) + dCdQ(position) + dlogQdQ(position)
@@ -218,8 +219,8 @@ A_data = pd.read_csv("./data/A_data.csv")
 A_data = A_data[A_data.Energy == 100]
 theory_points = A_data.loc[:, ['2', '3', '4', '5']].values
 kinpars = A_data.theta.values
-jitter = 1e-10
-length_scales = 3  # TOTALLY MADE UP
+jitter = 1e-7
+length_scales = 30  # TOTALLY MADE UP
 
 U_function = UFactory(
     theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=10,
@@ -228,11 +229,11 @@ grad_U_function = GradUFactory(
     theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=10,
     alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 
-bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=25, step_size=0.00001)
+bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=50, step_size=0.00001)
 
-start_position = np.array([0.55, 0.001, 0.1])  # Q, Mu, SigamSq
+start_position = np.array([0.6, 0.05, 1])  # Q, Mu, SigamSq
 
-bayes_model.initialize(start_position, np.array((10, 1, 1)))
+bayes_model.initialize(start_position, np.array((20, 1, 5)))
 bayes_model.set_bounds({0: (0, 1),
                         1: (-np.Infinity, np.Infinity),
                         2: (0, np.Infinity)})
@@ -253,6 +254,9 @@ print_res[:, 0:3] = results
 print_res[:, 3] = delta_mu
 print_res[:, 4] = delta_sig
 
-print(print_res)
+plt.plot(Q)
+plt.show()
+
+print(results) #print_res)
 
 print("Acceptance Percentage: ", bayes_model.number_accepted / bayes_model.total_number_of_draws)
