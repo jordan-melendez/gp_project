@@ -63,21 +63,21 @@ datafile = prefix + datafile + "_"
 # run MultiNest
 result = solve(
     LogLikelihood=loglike, Prior=prior,
-    n_dims=n_params, outputfiles_basename=datafile, resume=True, verbose=True)
-json.dump(parameters, open(datafile + '_1_params.json', 'w'))  # save parameter names
+    n_dims=n_params, outputfiles_basename=datafile, resume=False, verbose=True)
+# json.dump(parameters, open(datafile + '_1_params.json', 'w'))  # save parameter names
 
-# plot the distribution of a posteriori possible models
-plt.figure()
-plt.plot(x, ydata.T, '+ ', color='red', label='data')
-a = pymultinest.Analyzer(outputfiles_basename=datafile, n_params=n_params)
-colors = ['orange', 'green', 'blue', 'red']
-for (Q, mu, sigmasq) in a.get_equal_weighted_posterior()[::100,:-1]:
-    for i, cn in enumerate(ydata):
-        n = i + 2
-        plt.plot(x, cn/Q**n, '-', color=colors[i],
-                 alpha=0.2, label='c{}'.format(n))
+# # plot the distribution of a posteriori possible models
+# plt.figure()
+# plt.plot(x, ydata.T, '+ ', color='red', label='data')
+# a = pymultinest.Analyzer(outputfiles_basename=datafile, n_params=n_params)
+# colors = ['orange', 'green', 'blue', 'red']
+# for (Q, mu, sigmasq) in a.get_equal_weighted_posterior()[::100,:-1]:
+#     for i, cn in enumerate(ydata):
+#         n = i + 2
+#         plt.plot(x, cn/Q**n, '-', color=colors[i],
+#                  alpha=0.2, label='c{}'.format(n))
 
-# plt.legend()
-plt.tight_layout()
-plt.savefig(datafile + 'posterior.pdf')
-plt.close()
+# # plt.legend()
+# plt.tight_layout()
+# plt.savefig(datafile + 'posterior.pdf')
+# plt.close()
