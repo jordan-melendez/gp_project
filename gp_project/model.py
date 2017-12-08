@@ -173,7 +173,7 @@ def GradUFactory(Xs, kinpars, ls, jitter, mu_mu, sigmasq_mu, alpha_sig,
         V = Ci - mu
         RinvV = chol_solve((Rchol, True), V)
 
-        return 1 / sigmasq * RinvV @ Ci/Q * (i+2)
+        return - 1 / sigmasq * RinvV @ Ci/Q * (i+2)
 
     def dCdSigmasq(position):
         return sum(dCidSigmasq(position, i) for i in range(K))
@@ -229,11 +229,11 @@ grad_U_function = GradUFactory(
     theory_points, kinpars, length_scales, jitter, mu_mu=0, sigmasq_mu=10,
     alpha_Q=1, beta_Q=1, alpha_sig=1, beta_sig=1)
 
-bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=50, step_size=0.00001)
+bayes_model = HamiltonianSampler(U_function, grad_U_function, num_leaps=50, step_size=0.00001, tempering=np.array([0.6, 1.01, 1.01]))
 
 start_position = np.array([0.6, 0.05, 1])  # Q, Mu, SigamSq
 
-bayes_model.initialize(start_position, np.array((20, 1, 5)))
+bayes_model.initialize(start_position)
 bayes_model.set_bounds({0: (0, 1),
                         1: (-np.Infinity, np.Infinity),
                         2: (0, np.Infinity)})
@@ -250,7 +250,7 @@ delta_sig = np.sqrt(Q**12 / (1 - Q**2) * sigmasq)
 deltas = np.random.normal(loc=delta_mu, scale=delta_sig)
 
 print_res = np.zeros((results.shape[0], results.shape[1] + 2))
-print_res[:, 0:3] = results
+print_res[:, 0:5] = results
 print_res[:, 3] = delta_mu
 print_res[:, 4] = delta_sig
 
